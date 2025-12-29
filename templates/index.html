@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatDocs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>💬 ChatDocs</h1>
+                <p class="subtitle">Chat with your documents - PDF & DOCX supported</p>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="chat">💬 Chat</button>
+            <button class="tab-btn" data-tab="upload">📤 Upload</button>
+            <button class="tab-btn" data-tab="library">📚 Library</button>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="tab-content">
+            <!-- Chat Tab -->
+            <div id="chat-tab" class="tab-pane active">
+                <div class="settings-bar">
+                    <div class="setting-group">
+                        <label for="k-input">Chunks (k):</label>
+                        <input type="number" id="k-input" min="1" max="10" value="5">
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="show-chunks">
+                            Show chunks
+                        </label>
+                    </div>
+                </div>
+
+                <div class="chat-container" id="chat-container">
+                    <div class="message assistant-message">
+                        <div class="message-content">
+                            <p><strong>Welcome to ChatDocs!</strong> 👋</p>
+                            <p>No documents yet. Go to the <strong>Upload tab</strong> and upload your first documents (PDF or DOCX).</p>
+                            <p>After that, you can ask questions about your documents here!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <div class="input-container">
+                        <textarea 
+                            id="user-input" 
+                            placeholder="Ask your question here..."
+                            rows="2"
+                        ></textarea>
+                        <button id="send-btn" class="btn-primary">
+                            <span id="send-text">Send</span>
+                            <span id="send-loader" class="loader" style="display: none;"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Tab -->
+            <div id="upload-tab" class="tab-pane">
+                <div class="upload-section">
+                    <div class="upload-header">
+                        <h2>📤 Upload Documents</h2>
+                        <p>Supported formats: PDF, DOCX</p>
+                    </div>
+
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">📄</div>
+                        <p class="upload-text">Drop files here or click to select</p>
+                        <p class="upload-subtext">Max. 50 MB per file</p>
+                        <input type="file" id="file-input" accept=".pdf,.docx,.doc" multiple style="display: none;">
+                    </div>
+
+                    <div id="upload-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <p id="progress-text">Processing...</p>
+                    </div>
+
+                    <div id="upload-results"></div>
+                </div>
+            </div>
+
+            <!-- Library Tab -->
+            <div id="library-tab" class="tab-pane">
+                <div class="library-section">
+                    <div class="library-header">
+                        <div>
+                            <h2>📚 Document Library</h2>
+                            <div id="library-stats" class="library-stats"></div>
+                        </div>
+                        <button id="reindex-btn" class="btn-secondary">🔄 Re-index All</button>
+                    </div>
+
+                    <div id="documents-list" class="documents-list">
+                        <p class="loading-text">Loading documents...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
