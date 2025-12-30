@@ -26,7 +26,7 @@ class DynamicRAG:
     """
     
     def __init__(self, 
-                 embedding_model: str = 'sentence-transformers/all-MiniLM-L6-v2',
+                 embedding_model: str = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
                  llm_model: str = 'microsoft/Phi-3-mini-4k-instruct',
                  index_dir: Optional[Path] = None):
         """
@@ -224,7 +224,7 @@ class DynamicRAG:
         
         # Parse results with threshold
         results = []
-        SIMILARITY_THRESHOLD = 0.3  # Nur Chunks über 0.3 Score
+        SIMILARITY_THRESHOLD = 0.15  # Niedrigerer Threshold für cross-language matching
         
         for i, idx in enumerate(indices[0]):
             if idx == -1 or idx >= len(self.chunks):
