@@ -70,37 +70,20 @@ class DynamicRAG:
             print(f"   ✅ Loaded: {self.embedding_model_name}")
     
     def load_llm(self):
-        """Lädt LLM (optimiert für Windows mit bitsandbytes-windows)"""
+        """Lädt Phi-3-mini Modell auf CPU"""
         if self.llm_model is None:
             print(f"🤖 Loading LLM (this may take a minute)...")
             
             self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name)
             
-            # Try with 4-bit quantization (should work with bitsandbytes-windows)
-            try:
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.float16
-                )
-                
-                self.llm_model = AutoModelForCausalLM.from_pretrained(
-                    self.llm_model_name,
-                    quantization_config=quantization_config,
-                    device_map="auto",
-                    torch_dtype=torch.float16
-                )
-                print(f"   ✅ LLM loaded with 4-bit quantization")
-                    
-            except Exception as e:
-                print(f"   ⚠️  4-bit loading failed: {e}")
-                print(f"   ⚠️  Loading on CPU (this will be slower)")
-                self.llm_model = AutoModelForCausalLM.from_pretrained(
-                    self.llm_model_name,
-                    torch_dtype=torch.float32,
-                    low_cpu_mem_usage=True
-                )
-                print(f"   ✅ LLM loaded (CPU mode)")
+            # Load directly on CPU with float32
+            self.llm_model = AutoModelForCausalLM.from_pretrained(
+                self.llm_model_name,
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=True
+            )
+            
+            print(f"   ✅ LLM loaded (CPU mode)")
     
     def load_index(self):
         """Lädt existierenden Index oder erstellt neuen"""
@@ -269,23 +252,19 @@ class DynamicRAG:
         
         context = "\n\n".join(context_parts)
         
-        # Build prompt
-        prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-
+        # Build prompt for Phi-3
+        prompt = f"""<|system|>
 Du bist ein hilfreicher Assistent für Dokumenten-basierte Fragen.
-
 Beantworte Fragen basierend auf den bereitgestellten Dokumenten.
 Antworte klar, präzise und verständlich auf Deutsch.
-Wenn die Antwort nicht in den Dokumenten steht, sage das ehrlich.
-<|eot_id|><|start_header_id|>user<|end_header_id|>
-
+Wenn die Antwort nicht in den Dokumenten steht, sage das ehrlich.<|end|>
+<|user|>
 Basierend auf folgenden Dokumenten:
 
 {context}
 
-Beantworte die Frage: {query}
-<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-
+Beantworte die Frage: {query}<|end|>
+<|assistant|>
 """
         
         # Generate
@@ -295,24 +274,29 @@ Beantworte die Frage: {query}
             outputs = self.llm_model.generate(
                 **inputs,
                 max_new_tokens=300,
-                temperature=0.3,
+                temperature=0.7,
                 do_sample=True,
-                pad_token_id=self.llm_tokenizer.eos_token_id
+                top_p=0.95,
+                pad_token_id=self.llm_tokenizer.eos_token_id,
+                eos_token_id=self.llm_tokenizer.convert_tokens_to_ids("<|end|>")
             )
         
         # Decode only the NEW tokens (not the prompt)
-        # This is the key fix - only decode what was generated
         new_tokens = outputs[0][inputs['input_ids'].shape[1]:]
         answer = self.llm_tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         
-        # Simple cleanup
-        if not answer or len(answer) < 10:
-            # Fallback: decode everything and try to extract
+        # Remove any remaining special tokens
+        answer = answer.replace("<|end|>", "").replace("<|assistant|>", "").strip()
+        
+        # If answer is empty or too short, try fallback
+        if not answer or len(answer) < 5:
             full_response = self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            if "assistant" in full_response:
-                answer = full_response.split("assistant")[-1].strip()
-            else:
-                answer = full_response
+            # Try to extract after the last user message
+            if "Beantworte die Frage:" in full_response:
+                answer = full_response.split("Beantworte die Frage:")[-1].strip()
+                # Remove the question itself
+                if query in answer:
+                    answer = answer.split(query)[-1].strip()
         
         return {
             'answer': answer,
