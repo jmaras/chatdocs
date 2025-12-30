@@ -70,7 +70,7 @@ async function handleSend() {
         const data = await response.json();
         
         addMessage(data.answer, 'assistant', {
-            chunks: showChunks ? data.chunks : null,
+            chunks: data.chunks,  // Always send chunks
             metadata: data.metadata
         });
         
@@ -99,7 +99,33 @@ function addMessage(text, type, extras = {}) {
     contentDiv.appendChild(textP);
     
     if (extras.chunks && extras.chunks.length > 0) {
-        contentDiv.appendChild(createChunksDisplay(extras.chunks));
+        // Add toggle button for chunks
+        const toggleBtn = document.createElement('button');
+        toggleBtn.textContent = `Show ${extras.chunks.length} Retrieved Chunks`;
+        toggleBtn.style.marginTop = '0.75rem';
+        toggleBtn.style.padding = '0.5rem 1rem';
+        toggleBtn.style.fontSize = '0.85rem';
+        toggleBtn.style.cursor = 'pointer';
+        toggleBtn.style.background = 'var(--bg-tertiary)';
+        toggleBtn.style.border = '1px solid var(--border)';
+        toggleBtn.style.borderRadius = '6px';
+        toggleBtn.style.color = 'var(--text-secondary)';
+        
+        const chunksContainer = createChunksDisplay(extras.chunks);
+        chunksContainer.style.display = 'none';
+        
+        toggleBtn.addEventListener('click', () => {
+            if (chunksContainer.style.display === 'none') {
+                chunksContainer.style.display = 'block';
+                toggleBtn.textContent = 'Hide Retrieved Chunks';
+            } else {
+                chunksContainer.style.display = 'none';
+                toggleBtn.textContent = `Show ${extras.chunks.length} Retrieved Chunks`;
+            }
+        });
+        
+        contentDiv.appendChild(toggleBtn);
+        contentDiv.appendChild(chunksContainer);
     }
     
     if (extras.metadata) {

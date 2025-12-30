@@ -314,11 +314,45 @@ Beantworte die Frage: {query}
         # Decode
         response = self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        # Extract answer
+        # Extract answer (only the assistant's part)
+        # Try multiple extraction methods
+        answer = response
+        
+        # Method 1: Split by assistant header
         if "<|start_header_id|>assistant<|end_header_id|>" in response:
-            answer = response.split("<|start_header_id|>assistant<|end_header_id|>")[-1].strip()
-        else:
-            answer = response
+            parts = response.split("<|start_header_id|>assistant<|end_header_id|>")
+            if len(parts) > 1:
+                answer = parts[-1].strip()
+        
+        # Method 2: Remove everything before the last occurrence of the question
+        if query in answer:
+            # Find where our actual answer starts (after the question)
+            idx = answer.rfind(query)
+            if idx != -1:
+                # Take everything after the question
+                potential_answer = answer[idx + len(query):].strip()
+                # Remove common prompt artifacts
+                for artifact in ["Beantworte die Frage:", "assistant", "<|eot_id|>"]:
+                    potential_answer = potential_answer.replace(artifact, "").strip()
+                if potential_answer:
+                    answer = potential_answer
+        
+        # Method 3: If answer still contains system/user tags, try to clean
+        if "system" in answer or "user" in answer or "[Quelle" in answer:
+            # This means we got the full prompt - try to find actual answer
+            lines = answer.split('\n')
+            # Find the line after "Beantworte die Frage:" 
+            for i, line in enumerate(lines):
+                if query in line or "Beantworte die Frage:" in line:
+                    # Take everything after this
+                    answer = '\n'.join(lines[i+1:]).strip()
+                    break
+        
+        # Final cleanup
+        answer = answer.strip()
+        # Remove any remaining special tokens
+        for token in ["<|eot_id|>", "<|start_header_id|>", "<|end_header_id|>", "assistant", "system", "user"]:
+            answer = answer.replace(token, "").strip()
         
         return {
             'answer': answer,
