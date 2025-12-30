@@ -27,7 +27,7 @@ class DynamicRAG:
     
     def __init__(self, 
                  embedding_model: str = 'sentence-transformers/all-MiniLM-L6-v2',
-                 llm_model: str = 'meta-llama/Llama-3.2-3B-Instruct',
+                 llm_model: str = 'microsoft/Phi-3-mini-4k-instruct',
                  index_dir: Optional[Path] = None):
         """
         Args:
