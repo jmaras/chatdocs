@@ -9,14 +9,14 @@ PyMuPDF==1.23.8
 
 # RAG Core
 faiss-cpu==1.13.2
-sentence-transformers==2.2.2
-transformers==4.36.0
-torch==2.1.0
+sentence-transformers==3.3.1
+transformers==4.47.1
+torch==2.5.1
 
 # LLM Support
-accelerate==0.25.0
-bitsandbytes==0.41.3
-safetensors==0.4.1
+accelerate==1.2.1
+bitsandbytes==0.45.0
+safetensors==0.4.5
 
 # Utilities
-numpy==1.24.3
+numpy==2.2.1
