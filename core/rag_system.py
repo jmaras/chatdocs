@@ -70,20 +70,24 @@ class DynamicRAG:
             print(f"   ✅ Loaded: {self.embedding_model_name}")
     
     def load_llm(self):
-        """Lädt Phi-3-mini Modell auf CPU"""
+        """Lädt Phi-3-mini Modell (GPU wenn verfügbar, sonst CPU)"""
         if self.llm_model is None:
             print(f"🤖 Loading LLM (this may take a minute)...")
             
             self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name)
             
-            # Load directly on CPU with float32
+            # Load with auto device mapping (uses GPU if available)
             self.llm_model = AutoModelForCausalLM.from_pretrained(
                 self.llm_model_name,
-                torch_dtype=torch.float32,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                device_map="auto",
                 low_cpu_mem_usage=True
             )
             
-            print(f"   ✅ LLM loaded (CPU mode)")
+            if torch.cuda.is_available():
+                print(f"   ✅ LLM loaded on GPU")
+            else:
+                print(f"   ✅ LLM loaded on CPU")
     
     def load_index(self):
         """Lädt existierenden Index oder erstellt neuen"""
@@ -198,14 +202,14 @@ class DynamicRAG:
     
     def retrieve(self, query: str, k: int = 5) -> List[Dict]:
         """
-        Retrieval
+        Retrieval mit Similarity-Threshold
         
         Args:
             query: Suchquery
             k: Anzahl zu retrievender Chunks
             
         Returns:
-            Liste von Chunks mit Scores
+            Liste von Chunks mit Scores (nur über Threshold)
         """
         if self.index is None or self.index.ntotal == 0:
             return []
@@ -214,14 +218,22 @@ class DynamicRAG:
         query_emb = self.embedding_model.encode([query])
         faiss.normalize_L2(query_emb)
         
-        # Search
-        n_results = min(k, self.index.ntotal)
+        # Search - holen mehr als k für Filtering
+        n_results = min(k * 2, self.index.ntotal)
         similarities, indices = self.index.search(query_emb, n_results)
         
-        # Parse results
+        # Parse results with threshold
         results = []
+        SIMILARITY_THRESHOLD = 0.3  # Nur Chunks über 0.3 Score
+        
         for i, idx in enumerate(indices[0]):
             if idx == -1 or idx >= len(self.chunks):
+                continue
+            
+            score = float(similarities[0][i])
+            
+            # Filter by threshold
+            if score < SIMILARITY_THRESHOLD:
                 continue
             
             chunk = self.chunks[idx]
@@ -229,8 +241,12 @@ class DynamicRAG:
                 'id': str(chunk['id']),
                 'text': chunk['text'],
                 'metadata': chunk['metadata'],
-                'score': float(similarities[0][i])
+                'score': score
             })
+            
+            # Limit to k results
+            if len(results) >= k:
+                break
         
         return results
     
@@ -252,18 +268,23 @@ class DynamicRAG:
         
         context = "\n\n".join(context_parts)
         
-        # Build prompt for Phi-3
+        # Build prompt for Phi-3 with stricter instructions
         prompt = f"""<|system|>
-Du bist ein hilfreicher Assistent für Dokumenten-basierte Fragen.
-Beantworte Fragen basierend auf den bereitgestellten Dokumenten.
-Antworte klar, präzise und verständlich auf Deutsch.
-Wenn die Antwort nicht in den Dokumenten steht, sage das ehrlich.<|end|>
+Du bist ein Assistent der NUR auf Basis der bereitgestellten Dokumente antwortet.
+
+WICHTIGE REGELN:
+1. Beantworte Fragen AUSSCHLIESSLICH mit Informationen aus den bereitgestellten Dokumenten
+2. Wenn die Antwort NICHT in den Dokumenten steht, sage klar: "Diese Information finde ich nicht in den hochgeladenen Dokumenten."
+3. Erfinde KEINE Informationen und nutze KEIN allgemeines Wissen
+4. Antworte auf Deutsch, klar und präzise<|end|>
 <|user|>
-Basierend auf folgenden Dokumenten:
+Hier sind die Dokumente:
 
 {context}
 
-Beantworte die Frage: {query}<|end|>
+Frage: {query}
+
+Denke daran: Antworte NUR basierend auf den obigen Dokumenten. Wenn die Information nicht vorhanden ist, sage das ehrlich.<|end|>
 <|assistant|>
 """
         
