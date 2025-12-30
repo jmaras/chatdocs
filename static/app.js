@@ -29,7 +29,6 @@ const sendBtn = document.getElementById('send-btn');
 const sendText = document.getElementById('send-text');
 const sendLoader = document.getElementById('send-loader');
 const kInput = document.getElementById('k-input');
-const showChunksCheckbox = document.getElementById('show-chunks');
 
 let isProcessing = false;
 
@@ -53,7 +52,6 @@ async function handleSend() {
     userInput.value = '';
     
     const k = parseInt(kInput.value);
-    const showChunks = showChunksCheckbox.checked;
     
     try {
         const response = await fetch('/api/chat', {
