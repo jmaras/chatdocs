@@ -256,7 +256,7 @@ class DynamicRAG:
         
         if not context_chunks:
             return {
-                'answer': 'Keine relevanten Informationen gefunden. Bitte lade Dokumente hoch.',
+                'answer': 'No relevant information found. Please upload documents. / Keine relevanten Informationen gefunden. Bitte lade Dokumente hoch.',
                 'model': self.llm_model_name,
                 'tokens': 0
             }
@@ -268,22 +268,27 @@ class DynamicRAG:
         
         context = "\n\n".join(context_parts)
         
-        # Build prompt for Phi-3 with stricter instructions
+        # Build bilingual prompt for Phi-3
         prompt = f"""<|system|>
+You are an assistant that answers ONLY based on the provided documents.
 Du bist ein Assistent der NUR auf Basis der bereitgestellten Dokumente antwortet.
 
-WICHTIGE REGELN:
-1. Beantworte Fragen AUSSCHLIESSLICH mit Informationen aus den bereitgestellten Dokumenten
-2. Wenn die Antwort NICHT in den Dokumenten steht, sage klar: "Diese Information finde ich nicht in den hochgeladenen Dokumenten."
-3. Erfinde KEINE Informationen und nutze KEIN allgemeines Wissen
-4. Antworte auf Deutsch, klar und präzise<|end|>
+IMPORTANT RULES / WICHTIGE REGELN:
+1. Answer questions EXCLUSIVELY with information from the provided documents
+   Beantworte Fragen AUSSCHLIESSLICH mit Informationen aus den bereitgestellten Dokumenten
+2. If the answer is NOT in the documents, clearly state: "I cannot find this information in the uploaded documents." / "Diese Information finde ich nicht in den hochgeladenen Dokumenten."
+3. DO NOT invent information and DO NOT use general knowledge
+   Erfinde KEINE Informationen und nutze KEIN allgemeines Wissen
+4. Answer in the SAME LANGUAGE as the question (English or German)
+   Antworte in der GLEICHEN SPRACHE wie die Frage (Englisch oder Deutsch)<|end|>
 <|user|>
-Hier sind die Dokumente:
+Here are the documents / Hier sind die Dokumente:
 
 {context}
 
-Frage: {query}
+Question / Frage: {query}
 
+Remember: Answer ONLY based on the documents above. If the information is not available, say so honestly.
 Denke daran: Antworte NUR basierend auf den obigen Dokumenten. Wenn die Information nicht vorhanden ist, sage das ehrlich.<|end|>
 <|assistant|>
 """
