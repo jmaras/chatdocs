@@ -70,48 +70,37 @@ class DynamicRAG:
             print(f"   ✅ Loaded: {self.embedding_model_name}")
     
     def load_llm(self):
-        """Lädt LLM (with fallback for CPU/Windows)"""
+        """Lädt LLM (optimiert für Windows mit bitsandbytes-windows)"""
         if self.llm_model is None:
             print(f"🤖 Loading LLM (this may take a minute)...")
             
             self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name)
             
-            # Try 4-bit quantization if CUDA available, otherwise use float16
+            # Try with 4-bit quantization (should work with bitsandbytes-windows)
             try:
-                if torch.cuda.is_available():
-                    quantization_config = BitsAndBytesConfig(
-                        load_in_4bit=True,
-                        bnb_4bit_use_double_quant=True,
-                        bnb_4bit_quant_type="nf4",
-                        bnb_4bit_compute_dtype=torch.float16
-                    )
-                    
-                    self.llm_model = AutoModelForCausalLM.from_pretrained(
-                        self.llm_model_name,
-                        quantization_config=quantization_config,
-                        device_map="auto"
-                    )
-                    
-                    mem = torch.cuda.memory_allocated() / 1024**3
-                    print(f"   ✅ LLM loaded (GPU Memory: {mem:.2f} GB)")
-                else:
-                    # CPU fallback - load in float16 or float32
-                    print(f"   ⚠️  No CUDA available, loading on CPU (this will use more RAM)")
-                    self.llm_model = AutoModelForCausalLM.from_pretrained(
-                        self.llm_model_name,
-                        torch_dtype=torch.float32,
-                        low_cpu_mem_usage=True
-                    )
-                    print(f"   ✅ LLM loaded (CPU mode)")
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+                
+                self.llm_model = AutoModelForCausalLM.from_pretrained(
+                    self.llm_model_name,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    torch_dtype=torch.float16
+                )
+                print(f"   ✅ LLM loaded with 4-bit quantization")
                     
             except Exception as e:
-                print(f"   ⚠️  Quantization failed, falling back to CPU mode")
+                print(f"   ⚠️  4-bit loading failed: {e}")
+                print(f"   ⚠️  Loading on CPU (this will be slower)")
                 self.llm_model = AutoModelForCausalLM.from_pretrained(
                     self.llm_model_name,
                     torch_dtype=torch.float32,
                     low_cpu_mem_usage=True
                 )
-                print(f"   ✅ LLM loaded (CPU fallback mode)")
+                print(f"   ✅ LLM loaded (CPU mode)")
     
     def load_index(self):
         """Lädt existierenden Index oder erstellt neuen"""
@@ -311,48 +300,19 @@ Beantworte die Frage: {query}
                 pad_token_id=self.llm_tokenizer.eos_token_id
             )
         
-        # Decode
-        response = self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Decode only the NEW tokens (not the prompt)
+        # This is the key fix - only decode what was generated
+        new_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+        answer = self.llm_tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         
-        # Extract answer (only the assistant's part)
-        # Try multiple extraction methods
-        answer = response
-        
-        # Method 1: Split by assistant header
-        if "<|start_header_id|>assistant<|end_header_id|>" in response:
-            parts = response.split("<|start_header_id|>assistant<|end_header_id|>")
-            if len(parts) > 1:
-                answer = parts[-1].strip()
-        
-        # Method 2: Remove everything before the last occurrence of the question
-        if query in answer:
-            # Find where our actual answer starts (after the question)
-            idx = answer.rfind(query)
-            if idx != -1:
-                # Take everything after the question
-                potential_answer = answer[idx + len(query):].strip()
-                # Remove common prompt artifacts
-                for artifact in ["Beantworte die Frage:", "assistant", "<|eot_id|>"]:
-                    potential_answer = potential_answer.replace(artifact, "").strip()
-                if potential_answer:
-                    answer = potential_answer
-        
-        # Method 3: If answer still contains system/user tags, try to clean
-        if "system" in answer or "user" in answer or "[Quelle" in answer:
-            # This means we got the full prompt - try to find actual answer
-            lines = answer.split('\n')
-            # Find the line after "Beantworte die Frage:" 
-            for i, line in enumerate(lines):
-                if query in line or "Beantworte die Frage:" in line:
-                    # Take everything after this
-                    answer = '\n'.join(lines[i+1:]).strip()
-                    break
-        
-        # Final cleanup
-        answer = answer.strip()
-        # Remove any remaining special tokens
-        for token in ["<|eot_id|>", "<|start_header_id|>", "<|end_header_id|>", "assistant", "system", "user"]:
-            answer = answer.replace(token, "").strip()
+        # Simple cleanup
+        if not answer or len(answer) < 10:
+            # Fallback: decode everything and try to extract
+            full_response = self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            if "assistant" in full_response:
+                answer = full_response.split("assistant")[-1].strip()
+            else:
+                answer = full_response
         
         return {
             'answer': answer,
