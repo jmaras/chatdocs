@@ -15,7 +15,7 @@ torch==2.5.1
 
 # LLM Support
 accelerate==1.2.1
-bitsandbytes-windows
+bitsandbytes
 safetensors==0.4.5
 
 # Utilities
