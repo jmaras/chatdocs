@@ -70,30 +70,48 @@ class DynamicRAG:
             print(f"   ✅ Loaded: {self.embedding_model_name}")
     
     def load_llm(self):
-        """Lädt LLM mit 4-bit Quantization"""
+        """Lädt LLM (with fallback for CPU/Windows)"""
         if self.llm_model is None:
             print(f"🤖 Loading LLM (this may take a minute)...")
             
             self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name)
             
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
-            )
-            
-            self.llm_model = AutoModelForCausalLM.from_pretrained(
-                self.llm_model_name,
-                quantization_config=quantization_config,
-                device_map="auto"
-            )
-            
-            if torch.cuda.is_available():
-                mem = torch.cuda.memory_allocated() / 1024**3
-                print(f"   ✅ LLM loaded (GPU Memory: {mem:.2f} GB)")
-            else:
-                print(f"   ✅ LLM loaded (CPU)")
+            # Try 4-bit quantization if CUDA available, otherwise use float16
+            try:
+                if torch.cuda.is_available():
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.float16
+                    )
+                    
+                    self.llm_model = AutoModelForCausalLM.from_pretrained(
+                        self.llm_model_name,
+                        quantization_config=quantization_config,
+                        device_map="auto"
+                    )
+                    
+                    mem = torch.cuda.memory_allocated() / 1024**3
+                    print(f"   ✅ LLM loaded (GPU Memory: {mem:.2f} GB)")
+                else:
+                    # CPU fallback - load in float16 or float32
+                    print(f"   ⚠️  No CUDA available, loading on CPU (this will use more RAM)")
+                    self.llm_model = AutoModelForCausalLM.from_pretrained(
+                        self.llm_model_name,
+                        torch_dtype=torch.float32,
+                        low_cpu_mem_usage=True
+                    )
+                    print(f"   ✅ LLM loaded (CPU mode)")
+                    
+            except Exception as e:
+                print(f"   ⚠️  Quantization failed, falling back to CPU mode")
+                self.llm_model = AutoModelForCausalLM.from_pretrained(
+                    self.llm_model_name,
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True
+                )
+                print(f"   ✅ LLM loaded (CPU fallback mode)")
     
     def load_index(self):
         """Lädt existierenden Index oder erstellt neuen"""
